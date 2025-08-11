@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RFID Attendance — GitHub Pages</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>RFID Attendance System</h1>
+
+    <div id="clock" class="clock" aria-live="polite"></div>
+
+    <!-- Keep visible for testing; most scanners act like keyboard input -->
+    <label for="rfidInput" class="visually-hidden">RFID Input</label>
+    <input id="rfidInput" type="text" autocomplete="off" inputmode="numeric" placeholder="Tap RFID card here" />
+
+    <div id="status" class="status" aria-live="polite">Waiting for scan…</div>
+
+    <section id="todayLogs" class="logs">
+      <h2>Today's Recent Logs</h2>
+      <table id="logsTable" aria-describedby="todayLogs">
+        <thead><tr><th>RFID</th><th>Date</th><th>Time</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="js/app.js" ></script>
+</body>
+</html>
