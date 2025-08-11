@@ -1,75 +1,64 @@
-// Code.gs
-// This script expects POST requests with JSON body:
-// { rfid: "...", isoDate: "...", date: "...", time: "..." }
-// It appends rows to a sheet and toggles between Log In / Log Out for the same RFID on the same date.
-// Optionally, a GET request with ?action=recent returns recent rows as JSON.
-
 function doPost(e) {
   try {
-    var ss = SpreadsheetApp.openById('YOUR_SHEET_ID'); // optional: use openById for clarity
-    var sheet = ss.getSheetByName('Logs') || ss.getSheets()[0];
+    var ss = SpreadsheetApp.openById('YOUR_SHEET_ID'); // Replace with your sheet ID
+    var sheet = ss.getSheets()[0]; // first sheet
 
     var data = JSON.parse(e.postData.contents);
     var rfid = String(data.rfid || '').trim();
-    var date = data.date || Utilities.formatDate(new Date(data.isoDate || new Date()), Session.getScriptTimeZone(), "MM/dd/yyyy");
-    var time = data.time || Utilities.formatDate(new Date(data.isoDate || new Date()), Session.getScriptTimeZone(), "HH:mm:ss");
-
     if (!rfid) {
       return ContentService.createTextOutput('Missing RFID').setMimeType(ContentService.MimeType.TEXT);
     }
 
-    // Ensure header exists
-    var header = ['RFID','Date','Time','Status'];
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(header);
-    } else {
-      var firstRow = sheet.getRange(1,1,1,sheet.getLastColumn()).getValues()[0];
-      if (firstRow.join() !== header.join()) {
-        sheet.insertRowBefore(1);
-        sheet.getRange(1,1,1,header.length).setValues([header]);
-      }
-    }
+    var now = new Date();
+    var timeNow = Utilities.formatDate(now, "Asia/Manila", "HH:mm:ss");
+    var dateNow = Utilities.formatDate(now, "Asia/Manila", "MM/dd/yyyy");
 
-    // Read rows for today (read last 500 rows to keep it efficient)
+    // Get all data in Column A (RFID)
     var lastRow = sheet.getLastRow();
-    var startRow = Math.max(2, lastRow - 499);
-    var rows = sheet.getRange(startRow,1,lastRow-startRow+1,4).getValues();
+    var rfidValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues(); // skip header
 
-    // determine if last action for this RFID today was a Log In
-    var status = "Log In";
-    for (var i = rows.length - 1; i >= 0; i--) {
-      var row = rows[i];
-      var rfidCell = String(row[0]);
-      var dateCell = String(row[1]);
-      var statusCell = String(row[3]);
-      if (rfidCell === rfid && dateCell === date && statusCell === "Log In") {
-        status = "Log Out";
+    var foundRow = -1;
+    for (var i = 0; i < rfidValues.length; i++) {
+      if (String(rfidValues[i][0]) === rfid) {
+        foundRow = i + 2; // +2 to account for header
         break;
       }
     }
 
-    sheet.appendRow([rfid, date, time, status]);
+    if (foundRow === -1) {
+      return ContentService.createTextOutput('RFID not found in records').setMimeType(ContentService.MimeType.TEXT);
+    }
 
-    return ContentService.createTextOutput(status + " successful").setMimeType(ContentService.MimeType.TEXT);
+    // Columns: H = Time In (8), I = Time Out (9), J = Status (10)
+    var timeIn = sheet.getRange(foundRow, 8).getValue();
+    var timeOut = sheet.getRange(foundRow, 9).getValue();
+
+    var status = '';
+    if (!timeIn) {
+      sheet.getRange(foundRow, 8).setValue(timeNow); // Time In
+      status = 'ON DUTY';
+    } else if (!timeOut) {
+      sheet.getRange(foundRow, 9).setValue(timeNow); // Time Out
+      status = 'OFF DUTY';
+    } else {
+      // Already logged in and out today
+      return ContentService.createTextOutput('Already completed shift').setMimeType(ContentService.MimeType.TEXT);
+    }
+
+    sheet.getRange(foundRow, 10).setValue(status); // Status column
+
+    // Return full name + action
+    var rank = sheet.getRange(foundRow, 2).getValue();
+    var lastName = sheet.getRange(foundRow, 3).getValue();
+    var firstName = sheet.getRange(foundRow, 4).getValue();
+    var middleName = sheet.getRange(foundRow, 5).getValue();
+    var suffix = sheet.getRange(foundRow, 6).getValue();
+
+    var fullName = rank + ' ' + firstName + ' ' + middleName + ' ' + lastName + ' ' + suffix;
+    return ContentService.createTextOutput(fullName + ' → ' + status + ' at ' + timeNow)
+      .setMimeType(ContentService.MimeType.TEXT);
 
   } catch (err) {
     return ContentService.createTextOutput('Error: ' + err.message).setMimeType(ContentService.MimeType.TEXT);
   }
-}
-
-function doGet(e) {
-  // Optional: support ?action=recent to return recent logs as JSON for the UI table.
-  if (e && e.parameter && e.parameter.action === 'recent') {
-    var ss = SpreadsheetApp.openById('YOUR_SHEET_ID');
-    var sheet = ss.getSheetByName('Logs') || ss.getSheets()[0];
-    var data = sheet.getDataRange().getValues();
-    var out = [];
-    // skip header
-    for (var i = Math.max(1, data.length - 30); i < data.length; i++) {
-      var r = data[i];
-      out.push({ rfid: r[0], date: r[1], time: r[2], status: r[3] });
-    }
-    return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
-  }
-  return ContentService.createTextOutput('RFID Web App').setMimeType(ContentService.MimeType.TEXT);
 }
